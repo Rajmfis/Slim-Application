@@ -14,6 +14,7 @@ final class Controller
         $phone = $request->getParam('phone');
         $email = $request->getParam('email');
     
+        //set the warning params
         // $parsedBody = $request->getParsedBody();
         // $fname = $parsedBody['fname'];
         // $lname = $parsedBody['lname'];

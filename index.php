@@ -1,7 +1,9 @@
 <?php 
 header('Access-Control-Allow-Origin: *');
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS,PUT, DELETE");
+header("Access-Control-Allow-Headers: Origin, X-Requested-With, Content-Type, Accept");
 header('Content-Type: application/json');
+
 use \Psr\Http\Message\ServerRequestInterface as Request;
 use \Psr\Http\Message\ResponseInterface as Response;
 use \Firebase\JWT\JWT;
@@ -30,12 +32,14 @@ $mw = function ($request, $response, $next) {
  * Returns success 1 on successfully creating the user
  * Returns success 0 in case email already registered
  */
-$app->post('/users',Controller::class);
+// $app->post('/users',Controller::class);
+// ProfileController::class . ':unfollow'
 /**
  * The below endpoint retrieves the user for given id. 
  * returns success 1 on retrieval
  * returns success 0 on failure
  */
+///{id}
 $app->post('/users/{id}',function(Request $request, Response $response, array $args)  use($app){
 
     // $usermail = $request->getParam('emailId');
