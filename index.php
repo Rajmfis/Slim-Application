@@ -6,26 +6,49 @@ header('Content-Type: application/json');
 
 use \Psr\Http\Message\ServerRequestInterface as Request;
 use \Psr\Http\Message\ResponseInterface as Response;
+// include_once 'config/core.php';
+// require '../vendor/Firebase/php-jwt/src/BeforeValidException.php';
+// require '../vendor/Firebase/php-jwt/src/ExpiredException.php';
+// require '../vendor/Firebase/php-jwt/src/SignatureInvalidException.php';
+// require '../vendor/Firebase/src/JWT.php';
 use \Firebase\JWT\JWT;
 
-require '../vendor/autoload.php';
+require 'controller.php';
+require '../vendor/autoload.php';   
 
 $app = new \Slim\App;
 
 /**
  * A middleware function called to the respective endpoints to 
- * validate the key.
+ * validate the key
  */
 $mw = function ($request, $response, $next) {
-    // $response->getBody()->write('BEFORE');
-    //add validation here :
-    // $parsedBody = $request->getParsedBody();
-    if($request->getParam('key')==='IVJhakAxOTk3MDQj'){
-       return $next($request, $response);
+
+    $data = json_decode(file_get_contents("php://input"));     
+    // get jwt
+    $jwt=isset($data->jwt) ? $data->jwt : "";
+    // return $response->withJson(array("message" =>$jwt));
+    // exit();
+    if($jwt){
+        try {
+            // decode jwt
+            $decoded = JWT::decode($jwt,'mysecretkey', array('HS256'));
+            $response = $next($request, $response);
+            // set response code
+            http_response_code(200);
+            // show user details
+            return $response->withJson(array(
+                "message" => "Access granted.",
+                "data" => $decoded->data
+            ));
+        }catch(Exception $e){
+            // tell the user access denied
+            return $response->withJson(array("message" => "Unable to parse message"),401);
+        }
     }else{
-        return $response->withJson(array("success" => 0,"errormessage"=>"Authorized key not matched","error code"=>401),401);
+        // tell the user access denied
+        return $response->withJson(array("message" => "Access denied."),401);
     }
-    
 };
 /**
  * the below endpoint creates the new user. 
@@ -40,11 +63,10 @@ $mw = function ($request, $response, $next) {
  * returns success 0 on failure
  */
 ///{id}
-$app->post('/users/{id}',function(Request $request, Response $response, array $args)  use($app){
-
-    // $usermail = $request->getParam('emailId');
+function generate_token($request,$response,$args){
     $password=md5($request->getParam('pwd'));
     $id = $args['id'];
+    // $id= $request->getAttribute('routeInfo')[2]['id'];
     $link = mysqli_connect("localhost", "raj", "Raj@199704", "couponusers");
     $checkuser="SELECT * FROM users WHERE ID = '$id'";
     $userexist=mysqli_query($link, $checkuser);
@@ -58,31 +80,85 @@ $app->post('/users/{id}',function(Request $request, Response $response, array $a
             $lname=$row[1];
             $useremail=$row[2];
             $usercontact=$row[3];
-            return $response->withJson(array("success" => 1, "emailId" => $useremail ,"fname" => $fname,"lname" => $lname,"contactno" => $usercontact),200);
         }
+        $token = array(
+            // "iss" => $iss,
+            // "aud" => $aud,
+            // "iat" => $iat,
+            // "nbf" => $nbf,
+            "data" => array(
+                "id" => $id,
+                "firstname" => $fname,
+                "lastname" => $lname,
+                "email" => $useremail,
+                "contact"=>$usercontact
+            )
+         );
+         http_response_code(200);
+         $key='mysecretkey';
+         // generate jwt
+         $jwt = JWT::encode($token, $key);
+         return $response->withJson(
+                 array(
+                    "success" => 1,
+                     "message" => "Successful login.",
+                     "jwt" => $jwt,
+                     "id"=>$id,
+                     "firstname" => $fname,
+                     "lastname" => $lname,
+                     "email" => $useremail,
+                     "contact"=>$usercontact
+                 )
+         );
+    }else{
+        // tell the user login failed
+        return $response->withJson(array("success" => 0,"errormessage"=>"Invalid Credentials","status code"=>200),200);
     }
-    return $response->withJson(array("success" => 0,"errormessage"=>"Invalid Credentials","status code"=>200),200);
+}
+$app->post('/tokengenerate/{id}',function(Request $request, Response $response, array $args)use($app){
+    
+    $jsonvalue= generate_token($request,$response,$args);//token generated
+
+    return $jsonvalue;
 });
+$app->post('/users',function(Request $request, Response $response, array $args){
+    
+
+})->add($mw);
+
 /**
  * Endpoint deletes the user for given id.
  * Returns HTTP response status 204 on success with empty body
  * Returns success 0 if user doesn't exist.
  */
+// $app->delete('/users/{id}',function(Request $request, Response $response, array $args){
+
+//     $userId = $args['id'];
+//     $link = mysqli_connect("localhost", "raj", "Raj@199704", "couponusers");
+
+//     $sql= "DELETE FROM users WHERE ID ='$userId'";
+//     $result = mysqli_query($link,$sql);
+//     if(mysqli_affected_rows($link)){
+//         return $response->withJson(array(),204);
+//     }
+//     return $response->withJson(array('success' => 0,'errormessage'=>'user doesn\'t exist'),200);
+//     // }
+    
+// });
+
 $app->delete('/users/{id}',function(Request $request, Response $response, array $args){
 
-    $userId = $args['id'];
-    $link = mysqli_connect("localhost", "raj", "Raj@199704", "couponusers");
-
-    $sql= "DELETE FROM users WHERE ID ='$userId'";
-    $result = mysqli_query($link,$sql);
-    if(mysqli_affected_rows($link)){
-        return $response->withJson(array(),204);
-    }
-    return $response->withJson(array('success' => 0,'errormessage'=>'user doesn\'t exist'),200);
-    // }
+        $userId = $args['id'];
+        $link = mysqli_connect("localhost", "raj", "Raj@199704", "couponusers");
     
-});
+        $sql= "DELETE FROM users WHERE ID ='$userId'";
+        $result = mysqli_query($link,$sql);
+        if(mysqli_affected_rows($link)){
+            return $response->withJson(array(),204);
+        }
+        return $response->withJson(array('success' => 0,'errormessage'=>'user doesn\'t exist'),200);
 
+    });
 /**
  * The endpoint updates details for the specific user.
  *  Returns success 1 on successfuly updated
@@ -116,6 +192,6 @@ $app->put('/users/{id}',function(Request $request, Response $response,array $arg
     }
     return $response->withJson(array("success" => 0,'message'=>'User Doesn\'t Exist'),400);
     
-})->add($mw);
+});
 
 $app->run();
