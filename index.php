@@ -24,7 +24,8 @@ $app = new \Slim\App;
  */
 $mw = function ($request, $response, $next) {
 
-    $data = json_decode(file_get_contents("php://input"));     
+    $data = json_decode(file_get_contents("php://input"));
+    // $data=$request->getHeader('jwt');     
     // get jwt
     $jwt=isset($data->jwt) ? $data->jwt : "";
     // return $response->withJson(array("message" =>$jwt));
@@ -104,10 +105,10 @@ function generate_token($request,$response,$args){
                      "message" => "Successful login.",
                      "jwt" => $jwt,
                      "id"=>$id,
-                     "firstname" => $fname,
-                     "lastname" => $lname,
-                     "email" => $useremail,
-                     "contact"=>$usercontact
+                    //  "firstname" => $fname,
+                    //  "lastname" => $lname,
+                    //  "email" => $useremail,
+                    //  "contact"=>$usercontact
                  )
          );
     }else{
@@ -115,16 +116,97 @@ function generate_token($request,$response,$args){
         return $response->withJson(array("success" => 0,"errormessage"=>"Invalid Credentials","status code"=>200),200);
     }
 }
-$app->post('/tokengenerate/{id}',function(Request $request, Response $response, array $args)use($app){
-    
-    $jsonvalue= generate_token($request,$response,$args);//token generated
 
-    return $jsonvalue;
+//the below endpoint will be used for creating the user
+//registerpage.html form inputs 
+
+$app->post('/users',function(Request $request,Response $response,array $args){
+
+    $fname = $request->getParam('fname');
+    $lname = $request->getParam('lname');
+    $phone = $request->getParam('phone');
+    $email = $request->getParam('email');
+    $admin= $request->getParam('admin');
+    $password=md5($request->getParam('pwd'));
+
+    $link=mysqli_connect("localhost", "raj", "Raj@199704", "couponusers");;
+    $checkuser="SELECT * FROM users WHERE EMAIL_ID = '$email'";
+    $userexist=mysqli_query($link, $checkuser);
+    $checkresult=mysqli_num_rows($userexist);
+    
+
+    if($checkresult){
+        return $response->withJson(array("success" => 0,"errormessage"=>"Email_Id already exists","error code"=>200),200);
+    }
+
+    $sql = "INSERT INTO users(first_name,last_name,email_id,contact_no,pwd,created_by) VALUES ('$fname','$lname','$email','$phone','$password','$admin');";    
+   
+    if(mysqli_query($link, $sql)){
+        $id_Fetch="SELECT ID FROM USERS WHERE EMAIL_ID='$email'";
+        $row=mysqli_fetch_array(mysqli_query($link, $id_Fetch));
+        return $response->withJson(array("success" => 1, "emailId" => $email ,"fname"=>$fname,"lname"=>$lname,"contactno"=>$phone,"ID"=>$row['ID']),201);
+    }    
+
 });
-$app->post('/users',function(Request $request, Response $response, array $args){
-    
 
-})->add($mw);
+//call this endpoint when admin logs in 
+
+$app->post('/admin',function(Request $request,Response $response,array $args){
+
+    $email=$request->getParam('email');
+    $pwd=md5($request->getParam('pwd'));
+    // $row='';
+    $link = mysqli_connect("localhost", "raj", "Raj@199704", "couponusers");
+    $checkuser="SELECT * FROM users WHERE email_id = '$email'";
+    $userexist=mysqli_query($link, $checkuser);
+    $checkresult=mysqli_num_rows($userexist);
+    $sql= "SELECT * FROM users WHERE email_id = '$email' and pwd='$pwd'";  
+    $result = mysqli_query($link, $sql);
+    $numrows = mysqli_num_rows($result);
+    if($numrows>0){
+        while($row = mysqli_fetch_array($result)){
+            $fname=$row[0];
+            $lname=$row[1];
+            $useremail=$row[2];
+            $usercontact=$row[3];
+            if($row[6]!='admin'){   //if the user is logged in
+                return $response->withJson(array("success" => 1, "checkvalue"=>$row[6],"emailId" => $email ,"fname"=>$fname,"lname"=>$lname,"contactno"=>$usercontact),200);
+            }else{//if the admin is logged in
+                $users="SELECT * FROM users WHERE created_by = '$email'"; //admin name in created_by
+                $list_users=mysqli_query($link, $users);
+                $users_count = mysqli_num_rows($result);
+                if($users_count===0){
+                    return $response->withJson(array("success" => 1, "total_users"=>0,"emailId" => $email ,"fname"=>$fname,"lname"=>$lname,"contactno"=>$usercontact),200);
+                }else{
+                    $rows = array();
+                    while($row = mysqli_fetch_array($list_users)) {
+                        $rows[] = $row;
+                    }
+                    return $response->withJson(array("success" => 1,"total_users"=> ($rows),"emailId" => $email ,"fname"=>$fname,"lname"=>$lname,"contactno"=>$usercontact),200);
+                }
+            }
+        
+        }
+    }else{
+        return $response->withJson(array("success" => 0,"errormessage"=>"Invalid Credentials","status code"=>200),200);
+    }
+    //check for user or admin 
+    //if not both then return invalid credentials
+    
+});
+
+
+
+// $app->post('/tokengenerate/{id}',function(Request $request, Response $response, array $args)use($app){
+    
+//     $jsonvalue= generate_token($request,$response,$args);//token generated
+//     return $jsonvalue;
+// });
+// $app->post('/users',function(Request $request, Response $response, array $args){
+    
+    
+// })->add($mw);
+
 
 /**
  * Endpoint deletes the user for given id.
