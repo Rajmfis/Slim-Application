@@ -1,7 +1,7 @@
 <?php 
 header('Access-Control-Allow-Origin: *');
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS,PUT, DELETE");
-header("Access-Control-Allow-Headers: Origin, X-Requested-With, Content-Type, Accept");
+header("Access-Control-Allow-Headers: Origin, X-Requested-With, Content-Type, Accept, jwt");
 header('Content-Type: application/json');
 
 use \Psr\Http\Message\ServerRequestInterface as Request;
@@ -83,10 +83,10 @@ function generate_token($request,$response,$args){
             $usercontact=$row[3];
         }
         $token = array(
-            // "iss" => $iss,
-            // "aud" => $aud,
-            // "iat" => $iat,
-            // "nbf" => $nbf,
+            "iss" => $iss,
+            "aud" => $aud,
+            "iat" => $iat,
+            "nbf" => $nbf,
             "data" => array(
                 "id" => $id,
                 "firstname" => $fname,
@@ -117,9 +117,10 @@ function generate_token($request,$response,$args){
     }
 }
 
-//the below endpoint will be used for creating the user
-//registerpage.html form inputs 
-
+/**
+ * the below endpoint will be used for creating the user
+*  registerpage.html form inputs 
+*/
 $app->post('/users',function(Request $request,Response $response,array $args){
 
     $fname = $request->getParam('fname');
@@ -133,7 +134,6 @@ $app->post('/users',function(Request $request,Response $response,array $args){
     $checkuser="SELECT * FROM users WHERE EMAIL_ID = '$email'";
     $userexist=mysqli_query($link, $checkuser);
     $checkresult=mysqli_num_rows($userexist);
-    
 
     if($checkresult){
         return $response->withJson(array("success" => 0,"errormessage"=>"Email_Id already exists","error code"=>200),200);
@@ -149,17 +149,74 @@ $app->post('/users',function(Request $request,Response $response,array $args){
 
 });
 
-//call this endpoint when admin logs in 
-
-$app->post('/admin',function(Request $request,Response $response,array $args){
+/***
+ * generate jwt-token when login with user validation
+***/
+$app->post('/alert',function(Request $request,Response $response,array $args){
 
     $email=$request->getParam('email');
     $pwd=md5($request->getParam('pwd'));
-    // $row='';
     $link = mysqli_connect("localhost", "raj", "Raj@199704", "couponusers");
-    $checkuser="SELECT * FROM users WHERE email_id = '$email'";
-    $userexist=mysqli_query($link, $checkuser);
-    $checkresult=mysqli_num_rows($userexist);
+    // $checkuser="SELECT * FROM users WHERE email_id = '$email'";
+    // $userexist=mysqli_query($link, $checkuser);
+    // $checkresult=mysqli_num_rows($userexist);
+    $sql= "SELECT * FROM users WHERE email_id = '$email' and pwd='$pwd'";  
+    $result = mysqli_query($link, $sql);
+    $numrows = mysqli_num_rows($result);
+    if($numrows>0){
+        $token = array(
+            // "iss" => $iss,
+            // "aud" => $aud,
+            // "iat" => $iat,
+            // "nbf" => $nbf,
+            "data" => array(
+            "email" => $email,
+            "pwd"=>$pwd
+            )
+         );
+         $key='mysecretkey';
+         // generate jwt
+         $jwt = JWT::encode($token, $key);
+         return $response->withJson(
+                 array(
+                    "success" => 1,
+                     "message" => "Successful login.",
+                     "jwt" => $jwt,
+                 )
+         );
+    }else{
+        return $response->withJson(array("success" => 0,"errormessage"=>"Invalid Credentials","status code"=>200),200);
+    }
+
+});
+
+
+
+/***
+ * call this endpoint secondly on usercheck(above endpoint) success 
+ * jwt token to be passed in the header
+ ***/
+
+$app->post('/admin-users',function(Request $request,Response $response,array $args){
+
+    $jwt =$request->getHeaderLine('jwt');
+    if($jwt){
+        try {
+            // decode jwt
+            $decoded = JWT::decode($jwt,'mysecretkey', array('HS256'));
+            $email=$decoded->{"data"}->{"email"};;
+            $pwd=$decoded->{"data"}->{"pwd"};
+        }catch(Exception $e){
+            return $response->withJson(array("success"=>0,"message" => "Token Invalid"),200);
+        }
+    }else{
+        // tell the user access denied
+        return $response->withJson(array("success"=>0,"message" => "Access denied."),200);
+    }
+    $link = mysqli_connect("localhost", "raj", "Raj@199704", "couponusers");
+    // $checkuser="SELECT * FROM users WHERE email_id = '$email'";
+    // $userexist=mysqli_query($link, $checkuser);
+    // $checkresult=mysqli_num_rows($userexist);
     $sql= "SELECT * FROM users WHERE email_id = '$email' and pwd='$pwd'";  
     $result = mysqli_query($link, $sql);
     $numrows = mysqli_num_rows($result);
@@ -187,9 +244,8 @@ $app->post('/admin',function(Request $request,Response $response,array $args){
             }
         
         }
-    }else{
-        return $response->withJson(array("success" => 0,"errormessage"=>"Invalid Credentials","status code"=>200),200);
     }
+    return $response->withJson(array("success" => 0,"errormessage"=>"Invalid Credentials","status code"=>200),200);
     //check for user or admin 
     //if not both then return invalid credentials
     
